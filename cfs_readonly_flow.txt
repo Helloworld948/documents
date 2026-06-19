@@ -1,0 +1,124 @@
+###############################################################################
+# Cisco NSO LSA - CFS NODE - READ-ONLY VERIFICATION FLOW
+# Run in this exact order, on the CFS node.
+# Login first:  ssh <user>@<cfs-ip>
+###############################################################################
+
+STEP 1 — Process Status
+------------------------
+$ systemctl status ncs
+Expected output: "active (running)" in green, with main PID listed.
+
+$ ncs --status
+Expected output: lines like "ncs is alive", "rollback files configured".
+
+
+STEP 2 — Version Check
+------------------------
+$ ncs --version
+Expected output: version string, e.g. "5.7.3" — confirm matches target release.
+
+
+STEP 3 — Config Validation
+------------------------
+$ ncs --check-config
+Expected output: "OK" with no syntax errors.
+
+
+STEP 4 — CDB Integrity (log inspection)
+------------------------
+$ grep -i cdb logs/ncs.log | tail -50
+Expected output: No "error" or "corrupt" lines, normal startup entries only.
+
+
+STEP 5 — Port Accessibility
+------------------------
+$ netstat -tlnp | grep ncs
+$ ss -tlnp
+Expected output: LISTEN entries for ports 2022 (SSH/NETCONF), 8080 (REST), 8443 (WebUI/HTTPS).
+
+
+STEP 6 — CLI / NETCONF Login Test
+------------------------
+$ ssh -p 2022 admin@localhost
+Expected output: password prompt, then NSO CLI prompt e.g. "admin@cfs1>".
+
+Inside NSO CLI:
+> show ncs-state
+Expected output: state tree with version, uptime, ha-mode.
+
+
+STEP 7 — CFS Service Package Status
+------------------------
+(Inside ncs_cli)
+> show packages package oper-status
+Expected output: table listing CFS customer-facing service packages, each "up".
+
+
+STEP 8 — REST API Reachability
+------------------------
+$ curl -u admin:admin http://localhost:8080/restconf/data/
+Expected output: HTTP 200 response with RESTCONF data root XML/JSON. Non-200 = REST northbound not working.
+
+
+STEP 9 — Log File Presence
+------------------------
+$ ls -lh $NCS_DIR/logs/
+Expected output: ncs.log, audit.log, devel.log present, writable, non-zero size.
+
+
+STEP 10 — CFS → RFS Connectivity Check
+------------------------
+$ nc -zv <rfs-ip> 2022
+Expected output: "succeeded" / "open" — confirms CFS can reach RFS NETCONF port.
+
+$ ssh -p 2022 admin@<rfs-ip>
+Expected output: prompts for RFS password and lands on RFS NSO CLI — confirms reachability end-to-end (exit after testing, no config changes).
+
+Repeat Step 10 for every RFS node in the topology.
+
+
+STEP 11 — Dispatch Map / Service Routing Review
+------------------------
+(Inside ncs_cli, or by inspecting package source)
+> show running-config <relevant service path>
+Expected output: 'redeploy-util:action' or 'tailf-ncs:device' leaf pointing to the correct RFS device name for each service type. No fixed universal command — depends on installed service package.
+
+
+STEP 12 — AAA / Role Verification
+------------------------
+Manual check (no single command): attempt SSH login with admin, oper, and read-only credentials separately.
+Expected output: each role logs in successfully and is restricted to its intended permission scope; no unexpected "permission denied" for allowed actions, and no unauthorized access for restricted ones.
+
+
+STEP 13 — Time Sync
+------------------------
+$ timedatectl status
+Expected output: "System clock synchronized: yes".
+
+$ ntpq -p
+Expected output: valid NTP peer with low offset.
+
+$ chronyc tracking
+Expected output: "Leap status: Normal", minimal time offset.
+
+
+STEP 14 — Resource Allocation
+------------------------
+$ nproc
+Expected output: CPU core count, compare to sizing guide.
+
+$ free -h
+Expected output: RAM total/used/free, compare to sizing guide.
+
+
+STEP 15 — Topology Documentation
+------------------------
+(Inside ncs_cli)
+> show devices list
+Expected output: list of all devices CFS currently manages, including onboarded RFS nodes (post-onboarding) — use to cross-check against your runbook diagram.
+
+
+###############################################################################
+END OF CFS READ-ONLY FLOW
+###############################################################################

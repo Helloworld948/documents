@@ -1,0 +1,108 @@
+###############################################################################
+# Cisco NSO LSA - RFS NODE - READ-ONLY VERIFICATION FLOW
+# Run in this exact order, on each RFS node.
+# Login first:  ssh <user>@<rfs-ip>
+###############################################################################
+
+STEP 1 — Process Status
+------------------------
+$ systemctl status ncs
+Expected output: "active (running)" in green, with main PID listed.
+
+$ ncs --status
+Expected output: lines like "ncs is alive", "rollback files configured".
+
+
+STEP 2 — Version Check
+------------------------
+$ ncs --version
+Expected output: version string, e.g. "5.7.3" — confirm matches target release.
+
+
+STEP 3 — Config Validation
+------------------------
+$ ncs --check-config
+Expected output: "OK" with no syntax errors. Non-zero/error output = stop and fix before proceeding.
+
+
+STEP 4 — CDB Integrity (log inspection)
+------------------------
+$ grep -i cdb logs/ncs.log | tail -50
+Expected output: No "error" or "corrupt" lines. Normal startup lines only (e.g. "CDB started").
+
+
+STEP 5 — Port Accessibility
+------------------------
+$ netstat -tlnp | grep ncs
+$ ss -tlnp
+Expected output: LISTEN entries for ports 2022 (SSH/NETCONF) and 8080/8443 (REST/WebUI, if enabled on RFS).
+
+
+STEP 6 — CLI / NETCONF Login Test
+------------------------
+$ ssh -p 2022 admin@localhost
+Expected output: Prompts for password, then drops into NSO CLI prompt e.g. "admin@rfs1>".
+
+Inside NSO CLI:
+> show ncs-state
+Expected output: state tree showing version, uptime, ha-mode.
+
+
+STEP 7 — NED / Package Status
+------------------------
+(Inside ncs_cli)
+> show packages package oper-status
+Expected output: table of packages, each NED/package row showing "up".
+Any "down" or "error" status = investigate before device onboarding.
+
+
+STEP 8 — Log File Presence
+------------------------
+$ ls -lh $NCS_DIR/logs/
+Expected output: ncs.log, audit.log, devel.log present, writable (correct owner/permissions), non-zero size.
+
+
+STEP 9 — Directory Permissions
+------------------------
+$ ls -la $NCS_RUN_DIR
+Expected output: ownership shows "ncs" (or configured run-as user) on all directories.
+
+
+STEP 10 — Runtime VM Versions (if packages use Python/Java)
+------------------------
+$ python3 --version
+$ java -version
+Expected output: version matches what RFS NEDs/packages require (check package docs).
+
+
+STEP 11 — Kicker / Nano-service Definitions (if used)
+------------------------
+(Inside ncs_cli)
+> show running-config kicker
+Expected output: kicker definitions listed, pointing to correct trigger paths. Empty output is fine if kickers aren't used.
+
+
+STEP 12 — Time Sync
+------------------------
+$ timedatectl status
+Expected output: "System clock synchronized: yes", NTP service active.
+
+$ ntpq -p
+Expected output: at least one NTP peer with low offset/jitter.
+
+$ chronyc tracking
+Expected output: "Leap status: Normal", small "System time" offset value.
+
+
+STEP 13 — Resource Allocation
+------------------------
+$ nproc
+Expected output: CPU core count — compare to Cisco sizing guide (typically 8 vCPU min for production).
+
+$ free -h
+Expected output: total/used/free RAM — compare to sizing guide (typically 16 GB min for production).
+
+
+###############################################################################
+END OF RFS READ-ONLY FLOW
+###############################################################################
